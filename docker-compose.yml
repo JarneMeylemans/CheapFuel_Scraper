@@ -1,0 +1,14 @@
+services:
+  tankroute:
+    build: .
+    container_name: tankroute
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    environment:
+      - PRICE_SOURCE=carbu
+      - TZ=Europe/Brussels
+      - TANK_CAPACITY=50      # tankinhoud auto (liter), eenmalig
+      - CONSUMPTION=6.0       # gemiddeld verbruik (l/100 km), eenmalig
+    volumes:
+      - ./data:/data   # bewaart opgeslagen routes en cache

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tankroute</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--ink:#16313a;--paper:#f4f6f3;--line:#d5dcd6;--sign:#ffd23f;--go:#1f8a4c;--mute:#5d6f74}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:15px/1.4 "Instrument Sans",system-ui,sans-serif;color:var(--ink);background:var(--paper);display:grid;grid-template-columns:390px 1fr}
+aside{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0;overflow:auto}
+.form{padding:14px 16px;display:grid;gap:9px;border-bottom:1px solid var(--line)}
+h1{font-size:20px;margin:0}
+label{display:grid;gap:3px;font-size:13px;color:var(--mute)}
+input,select,button{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);min-width:0}
+button{cursor:pointer}button.pri{background:var(--ink);color:#fff;border-color:var(--ink);padding:9px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--sign);outline-offset:1px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.pt{display:grid;grid-template-columns:1fr auto auto;gap:6px;position:relative}
+.pt label{grid-column:1/-1}.pt button.on{background:var(--sign);border-color:var(--sign)}
+.sug{position:absolute;z-index:1000;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 14px #0003;max-height:220px;overflow:auto;margin-top:2px}
+.sug div{padding:7px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--line)}.sug div:hover{background:var(--paper)}
+.tools{display:flex;gap:6px;flex-wrap:wrap}.tools button{font-size:13px;padding:5px 9px}
+.saved{display:grid;gap:6px;border-top:1px solid var(--line);padding-top:9px}
+.saved .r{display:grid;grid-template-columns:1fr auto auto;gap:6px}.saved .r2{grid-template-columns:1fr auto}
+#routes{display:flex;gap:6px;flex-wrap:wrap}#routes:not(:empty){padding:10px 16px 0}
+#routes button{font-size:13px}#routes button.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+#msg{padding:8px 16px;font-size:13px;color:var(--mute)}#msg.warn{background:var(--sign);color:var(--ink)}
+ol{list-style:none;margin:0;padding:0}
+li{padding:10px 16px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:2px 8px;cursor:pointer}
+li:hover,li.best{background:#fff}li.best{box-shadow:inset 4px 0 var(--go)}
+li b{font-size:15px}li small{color:var(--mute)}.p{font-weight:700;font-size:17px;text-align:right}
+#map{height:100%}#map.pick{cursor:crosshair}
+.pin{background:var(--ink);color:#fff;border-radius:6px;padding:2px 6px;font:700 12px system-ui;white-space:nowrap;border:2px solid #fff;box-shadow:0 1px 3px #0005}
+.pin.best{background:var(--go);font-size:14px}
+.ab{width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--sign);border:2px solid var(--ink);display:grid;place-items:center;font:700 13px system-ui;margin:-14px 0 0 -14px}
+.ab span{transform:rotate(45deg)}
+.via{width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--ink);margin:-8px 0 0 -8px;cursor:grab}
+.via.ghost{border-color:var(--go);box-shadow:0 0 0 4px #1f8a4c33}
+.pop{min-width:210px;font:14px/1.35 "Instrument Sans",system-ui,sans-serif;color:var(--ink)}
+.pop .pn{font-weight:700;font-size:15px}.pop .pa{color:var(--mute);font-size:13px}
+.pop .pp{font-size:26px;font-weight:700;margin:6px 0 2px}.pop .pp small{font-size:13px;font-weight:400;color:var(--mute)}
+.pop dl{display:grid;grid-template-columns:auto auto;gap:3px 14px;margin:8px 0;font-size:13px}
+.pop dt{color:var(--mute)}.pop dd{margin:0;text-align:right;font-weight:600}
+.pop .tag{display:inline-block;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:700;background:#e6edf0}
+.pop .tag.best{background:var(--go);color:#fff}.pop .old{color:#b3261e}
+.pop a{display:block;margin-top:9px;color:var(--ink);font-weight:600}
+li .a{grid-column:1/-1;font-size:13px;color:var(--mute)}
+@media(max-width:800px){body{grid-template-columns:1fr;grid-template-rows:auto 45vh}aside{max-height:55vh}}
+</style></head><body>
+<aside>
+<div class="form">
+ <h1>Tankroute</h1>
+ <div class="pt"><label for="inA">Van</label><input id="inA" placeholder="Adres, bv. Hoogstraat 12 Mechelen" autocomplete="off"><button id="srchA">Zoek</button><button id="pickA" title="Klik daarna op de kaart">Kaart</button><div class="sug" id="sugA" hidden></div></div>
+ <div class="pt"><label for="inB">Naar</label><input id="inB" placeholder="Adres werk" autocomplete="off"><button id="srchB">Zoek</button><button id="pickB" title="Klik daarna op de kaart">Kaart</button><div class="sug" id="sugB" hidden></div></div>
+ <div class="row"><label>Brandstof<select id="fuel"><option value="diesel">Diesel</option><option value="e10">Benzine 95</option><option value="e5">Benzine 98</option><option value="lpg">LPG</option></select></label>
+ <label>Max. omweg (km)<input id="detour" type="number" step="0.5" value="2" min="0.5" max="10"></label></div>
+ <div class="row"><label>Te tanken (liter)<input id="liters" type="number" value="40"></label>
+ <label>Verbruik (l/100 km)<input id="cons" type="number" step="0.1" value="6"></label></div>
+ <button class="pri" id="go">Zoek route en goedkoopste tankstation</button>
+ <div class="tools"><button id="swap">Omkeren</button><button id="clearVia">Tussenpunten wissen</button></div>
+ <div class="saved"><label for="saved">Opgeslagen routes</label>
+  <div class="r"><select id="saved"></select><button id="load">Laden</button><button id="del">Wissen</button></div>
+  <div class="r r2"><input id="saveName" placeholder="Naam, bv. Werk heen" maxlength="60"><button id="save">Opslaan</button></div></div>
+</div>
+<div id="routes"></div>
+<div id="msg">Typ een adres en klik op Zoek, of klik op de kaart. Sleep aan de route om een tussenpunt te maken.</div>
+<ol id="list"></ol>
+</aside>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const eur=n=>'€'+n.toFixed(3).replace('.',',');
+const COORD=/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/;
+const map=L.map('map').setView([51.03,4.48],10);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+const routeLayer=L.layerGroup().addTo(map),stationLayer=L.layerGroup().addTo(map);
+const S={A:null,B:null,vias:[],routes:[],sel:0,mode:null,mk:{}};
+const msg=$('msg');
+const say=(t,warn)=>{msg.textContent=t;msg.className=warn?'warn':''};
+async function api(url,opt){const r=await fetch(url,opt);const t=await r.text();
+ if(!r.ok){let m=t;try{m=JSON.parse(t).detail}catch{}throw new Error(typeof m==='string'?m:JSON.stringify(m))}
+ return JSON.parse(t)}
+
+/* ---- begin- en eindpunt ---- */
+const abIcon=l=>L.divIcon({className:'',html:`<div class="ab"><span>${l}</span></div>`,iconSize:[0,0]});
+function setPoint(w,p,{route=true}={}){
+ p={lat:p.lat,lon:p.lon,label:p.label||''};
+ $('in'+w).value=p.label||`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;p.shown=$('in'+w).value;S[w]=p;
+ if(S.mk[w])S.mk[w].setLatLng([p.lat,p.lon]);
+ else{S.mk[w]=L.marker([p.lat,p.lon],{draggable:true,icon:abIcon(w),zIndexOffset:2000}).addTo(map);
+  S.mk[w].on('dragend',e=>fromLatLng(w,e.target.getLatLng()))}
+ if(route)planRoutes(true)}
+async function fromLatLng(w,ll){
+ setPoint(w,{lat:ll.lat,lon:ll.lng,label:''});
+ try{const r=await api(`/api/reverse?lat=${ll.lat}&lon=${ll.lng}`);S[w].label=r.label;S[w].shown=r.label;$('in'+w).value=r.label}catch{}}
+function pick(w){S.mode=S.mode===w?null:w;$('pickA').classList.toggle('on',S.mode==='A');$('pickB').classList.toggle('on',S.mode==='B');
+ $('map').classList.toggle('pick',!!S.mode)}
+$('pickA').onclick=()=>pick('A');$('pickB').onclick=()=>pick('B');
+map.on('click',e=>{const w=S.mode||(!S.A?'A':!S.B?'B':null);if(!w)return;
+ if(S.mode)pick(S.mode);fromLatLng(w,e.latlng)});
+
+/* ---- adres zoeken (knop of Enter) ---- */
+async function search(w){
+ const inp=$('in'+w),sug=$('sug'+w),q=inp.value.trim();sug.hidden=true;
+ if(COORD.test(q)){const[a,b]=q.split(',').map(Number);setPoint(w,{lat:a,lon:b});map.setView([a,b],13);return}
+ if(q.length<3){say('Typ minstens 3 tekens.',true);return}
+ say('Adres zoeken…');
+ try{const res=await api('/api/geocode?q='+encodeURIComponent(q));
+  if(!res.length){say('Adres niet gevonden. Probeer straat, nummer en gemeente.',true);return}
+  say('');if(res.length===1){setPoint(w,res[0]);map.setView([res[0].lat,res[0].lon],13);return}
+  sug.innerHTML='';res.forEach(r=>{const d=document.createElement('div');d.textContent=r.label;
+   d.onclick=()=>{sug.hidden=true;setPoint(w,r);map.setView([r.lat,r.lon],13)};sug.appendChild(d)});sug.hidden=false;
+  say('Kies het juiste adres uit de lijst.');
+ }catch(err){say('Fout: '+err.message,true)}}
+for(const w of['A','B']){
+ $('srch'+w).onclick=()=>search(w);
+ $('in'+w).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search(w)}});
+ $('in'+w).addEventListener('blur',()=>setTimeout(()=>$('sug'+w).hidden=true,200))}
+/* hoofdknop: neemt bij een niet-gezocht adres automatisch het eerste resultaat */
+async function resolve(w){
+ const inp=$('in'+w),q=inp.value.trim();
+ if(S[w]&&inp.value===S[w].shown)return true;
+ if(!q){say(`Vul "${w==='A'?'Van':'Naar'}" in.`,true);return false}
+ if(COORD.test(q)){const[a,b]=q.split(',').map(Number);setPoint(w,{lat:a,lon:b},{route:false});return true}
+ const res=await api('/api/geocode?q='+encodeURIComponent(q));
+ if(!res.length){say(`Adres niet gevonden: ${q}`,true);return false}
+ setPoint(w,res[0],{route:false});return true}
+$('go').onclick=async()=>{try{say('Bezig…');if(!(await resolve('A'))||!(await resolve('B')))return;S.vias=[];planRoutes(true)}
+ catch(err){say('Fout: '+err.message,true)}};
+$('swap').onclick=()=>{const a=S.A,b=S.B;if(!a||!b)return;S.vias=[];setPoint('A',b,{route:false});setPoint('B',a,{route:false});planRoutes(true)};
+$('clearVia').onclick=()=>{S.vias=[];planRoutes(false)};
+
+/* ---- routes ---- */
+const ll=p=>`${p.lat},${p.lon}`;
+async function planRoutes(fit,selKm){
+ if(!S.A||!S.B)return;
+ say('Routes berekenen…');
+ try{const q=new URLSearchParams({van:ll(S.A),naar:ll(S.B),via:S.vias.map(v=>`${v[0]},${v[1]}`).join(';')});
+  const d=await api('/api/routes?'+q);S.routes=d.routes;
+  S.sel=(selKm==null||S.vias.length)?0:d.routes.reduce((b,r,i)=>Math.abs(r.km-selKm)<Math.abs(d.routes[b].km-selKm)?i:b,0);
+  drawRoutes(fit);loadStations()}
+ catch(err){say('Fout: '+err.message,true)}}
+function nearestIdx(line,p){let b=0,bd=1e9;line.forEach((q,i)=>{const d=(q[0]-p[0])**2+(q[1]-p[1])**2;if(d<bd){bd=d;b=i}});return b}
+function sortVias(){const line=S.routes[S.sel].line;S.vias.sort((a,b)=>nearestIdx(line,a)-nearestIdx(line,b))}
+function addVia(p){S.vias.push([p.lat,p.lng]);sortVias();planRoutes(false)}
+
+/* losse "grijper" die je van de route af kan slepen */
+let ghost=null,ghostTimer=null,dragging=false;
+const viaIcon=c=>L.divIcon({className:'',html:`<div class="via ${c||''}"></div>`,iconSize:[0,0]});
+function hideGhost(){clearTimeout(ghostTimer);dragging=false;if(ghost){map.removeLayer(ghost);ghost=null}}
+function scheduleHide(){clearTimeout(ghostTimer);ghostTimer=setTimeout(()=>{if(!dragging)hideGhost()},500)}
+function showGhost(p){clearTimeout(ghostTimer);
+ if(ghost){ghost.setLatLng(p);return}
+ ghost=L.marker(p,{draggable:true,icon:viaIcon('ghost'),zIndexOffset:1800,title:'Sleep om de route te verleggen'}).addTo(map);
+ ghost.on('mouseover',()=>clearTimeout(ghostTimer));
+ ghost.on('mouseout',()=>{if(!dragging)scheduleHide()});
+ ghost.on('dragstart',()=>{dragging=true;clearTimeout(ghostTimer)});
+ ghost.on('dragend',e=>{const q=e.target.getLatLng();hideGhost();addVia(q)});
+ ghost.on('click',e=>{L.DomEvent.stop(e);const q=ghost.getLatLng();hideGhost();addVia(q)})}
+
+function drawRoutes(fit){
+ hideGhost();routeLayer.clearLayers();
+ S.routes.forEach((r,i)=>{if(i===S.sel)return;
+  L.polyline(r.line,{color:'#7c8f93',weight:6,opacity:.75}).addTo(routeLayer).on('click',e=>{L.DomEvent.stop(e);S.sel=i;drawRoutes(false);loadStations()})});
+ const cur=S.routes[S.sel];
+ const pl=L.polyline(cur.line,{color:'#16313a',weight:6,opacity:.9,interactive:false}).addTo(routeLayer);
+ const hit=L.polyline(cur.line,{color:'#000',weight:22,opacity:.01}).addTo(routeLayer);
+ hit.on('mousemove',e=>{if(!dragging)showGhost(e.latlng)});
+ hit.on('mouseout',scheduleHide);
+ hit.on('click',e=>{L.DomEvent.stop(e);addVia(e.latlng)}); /* ook voor touch */
+ S.vias.forEach((v,i)=>{const m=L.marker(v,{draggable:true,icon:viaIcon(),zIndexOffset:1500,title:'Sleep om te verleggen, klik om te verwijderen'}).addTo(routeLayer);
+  m.on('dragend',e=>{const p=e.target.getLatLng();S.vias[i]=[p.lat,p.lng];sortVias();planRoutes(false)});
+  m.on('click',e=>{L.DomEvent.stop(e);S.vias.splice(i,1);planRoutes(false)})});
+ if(fit)map.fitBounds(pl.getBounds(),{padding:[40,40]});
+ const box=$('routes');box.innerHTML='';
+ S.routes.forEach((r,i)=>{const b=document.createElement('button');b.className=i===S.sel?'sel':'';
+  b.textContent=`Route ${i+1}: ${r.km} km, ${r.min} min`;b.onclick=()=>{S.sel=i;drawRoutes(false);loadStations()};box.appendChild(b)})}
+
+/* ---- stations ---- */
+const nl=(n,d=2)=>Number(n).toFixed(d).replace('.',',');
+const fmtDist=m=>m>=1000?nl(m/1000,1)+' km':m+' m';
+function fmtDate(iso){if(!iso)return null;const[y,m,d]=iso.split('-');const age=Math.round((Date.now()-new Date(iso))/864e5);
+ return{text:`${d}/${m}/${y}`,age}}
+function popup(s,best){
+ const dt=fmtDate(s.updated),l=+$('liters').value;
+ const upd=dt?`<dt>Prijs bijgewerkt</dt><dd class="${dt.age>3?'old':''}">${dt.text}${dt.age>3?` (${dt.age} d oud)`:''}</dd>`:'';
+ return `<div class="pop"><div class="pn">${esc(s.name)}</div>${s.address?`<div class="pa">${esc(s.address)}</div>`:''}
+ <div class="pp">€${nl(s.price,3)} <small>per liter</small></div>
+ <span class="tag ${best?'best':''}">${best?'Beste keuze':'€'+nl(s.extra_vs_best)+' duurder dan de beste'}</span>
+ <dl><dt>Afstand tot route</dt><dd>${fmtDist(s.distance_to_route_m)}</dd>
+ <dt>Tanken (${l} l × €${nl(s.price,3)})</dt><dd>€${nl(s.fuel_cost)}</dd>
+ <dt>Extra rit${s.detour_exact?'':' (geschat)'}</dt><dd>${nl(s.detour_km,1)} km${s.detour_min!=null?', '+s.detour_min+' min':''}</dd>
+ <dt>Extra brandstof</dt><dd>€${nl(s.detour_cost)}</dd>
+ <dt><b>Totaal</b></dt><dd>€${nl(s.total_cost)}</dd>${upd}</dl>
+ <a href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lon}" target="_blank" rel="noopener">Open in Google Maps</a></div>`}
+let seq=0;
+async function loadStations(){
+ if(!S.routes.length)return;const my=++seq;
+ stationLayer.clearLayers();$('list').innerHTML='';say('Tankstations en prijzen ophalen… (eerste keer kan 20 s duren)');
+ try{const r=S.routes[S.sel];
+  const d=await api('/api/stations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+   line:r.line,vias:S.vias,base_km:r.km,base_min:r.min,fuel:$('fuel').value,max_detour:+$('detour').value,liters:+$('liters').value,consumption:+$('cons').value})});
+  if(my!==seq)return;
+  const w=(d.warnings||[]).join('; ');
+  if(!d.stations.length){say('Geen stations met prijs binnen die afstand van de route.'+(w?' '+w:''),true);return}
+  say(`Route ${r.km} km, ${r.min} min · ${d.stations.length} stations`+(d.demo?' · DEMO-PRIJZEN, niet echt':'')+(w?' · '+w:''),d.demo||!!w);
+  d.stations.forEach((s,i)=>{const best=i===0;
+   const m=L.marker([s.lat,s.lon],{zIndexOffset:best?1000:0,icon:L.divIcon({className:'',html:`<div class="pin ${best?'best':''}">${eur(s.price)}</div>`})}).addTo(stationLayer);
+   m.bindPopup(popup(s,best),{maxWidth:300});
+   const li=document.createElement('li');if(best)li.className='best';
+   li.innerHTML=`<b>${esc(s.name)}</b><span class="p">€${nl(s.price,3)}</span>${s.address?`<span class="a">${esc(s.address)}</span>`:''}<small>${fmtDist(s.distance_to_route_m)} van route · +${nl(s.detour_km,1)} km (€${nl(s.detour_cost)})</small><small style="text-align:right">${best?'beste keuze':'+€'+nl(s.extra_vs_best)}</small>`;
+   li.onclick=()=>{map.setView([s.lat,s.lon],15);m.openPopup()};$('list').appendChild(li);if(best)m.openPopup()});
+ }catch(err){if(my===seq)say('Fout: '+err.message,true)}}
+for(const id of['fuel','detour','liters','cons'])$(id).addEventListener('change',loadStations);
+
+/* ---- opslaan / laden ---- */
+let savedList=[];
+async function refreshSaved(select){
+ try{savedList=await api('/api/saved')}catch(err){say('Opgeslagen routes laden mislukt: '+err.message,true);return}
+ const sel=$('saved');sel.innerHTML='';
+ if(!savedList.length){sel.innerHTML='<option value="">(nog geen routes opgeslagen)</option>';return}
+ savedList.forEach(r=>{const o=document.createElement('option');o.value=o.textContent=r.name;sel.appendChild(o)});
+ if(select)sel.value=select}
+$('save').onclick=async()=>{
+ const name=$('saveName').value.trim();
+ if(!S.A||!S.B||!S.routes.length){say('Maak eerst een route voor je opslaat.',true);return}
+ if(!name){say('Geef de route een naam.',true);return}
+ try{await api('/api/saved',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,
+   a:{lat:S.A.lat,lon:S.A.lon,label:S.A.label||S.A.shown},b:{lat:S.B.lat,lon:S.B.lon,label:S.B.label||S.B.shown},
+   vias:S.vias,km:S.routes[S.sel].km,fuel:$('fuel').value,max_detour:+$('detour').value,
+   liters:+$('liters').value,consumption:+$('cons').value})});
+  say(`Route "${name}" opgeslagen.`);await refreshSaved(name)}
+ catch(err){say('Opslaan mislukt: '+err.message,true)}};
+$('load').onclick=()=>{
+ const sv=savedList.find(r=>r.name===$('saved').value);if(!sv){say('Kies eerst een opgeslagen route.',true);return}
+ S.vias=sv.vias;$('fuel').value=sv.fuel;$('detour').value=sv.max_detour;$('liters').value=sv.liters;$('cons').value=sv.consumption;
+ $('saveName').value=sv.name;setPoint('A',sv.a,{route:false});setPoint('B',sv.b,{route:false});planRoutes(true,sv.km)};
+$('del').onclick=async()=>{
+ const name=$('saved').value;if(!name)return;if(!confirm(`Route "${name}" wissen?`))return;
+ try{await api('/api/saved?name='+encodeURIComponent(name),{method:'DELETE'});say(`Route "${name}" gewist.`);await refreshSaved()}
+ catch(err){say('Wissen mislukt: '+err.message,true)}};
+refreshSaved();
+</script></body></html>
